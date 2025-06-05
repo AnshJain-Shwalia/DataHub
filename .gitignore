@@ -1,0 +1,15 @@
+# Environment variables
+backend/.env
+
+# Binaries
+backend/backend
+
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
