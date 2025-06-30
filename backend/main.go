@@ -22,10 +22,18 @@ func main() {
 	router := gin.Default()
 	authGroup := router.Group("/auth")
 	{
+		// Google OAuth routes
 		googleGroup := authGroup.Group("/google")
 		{
-			googleGroup.GET("/", auth.AuthCodeHandler)
-			googleGroup.GET("/oauth-url", auth.GenerateOAuthURLHandler)
+			googleGroup.POST("/", auth.GoogleAuthCodeHandler)
+			googleGroup.GET("/oauth-url", auth.GenerateGoogleOAuthURLHandler)
+		}
+
+		// GitHub OAuth routes
+		githubGroup := authGroup.Group("/github")
+		{
+			githubGroup.POST("/", auth.GitHubAuthCodeHandler)
+			githubGroup.GET("/oauth-url", auth.GenerateGitHubOAuthURLHandler)
 		}
 	}
 	router.Run(":" + strconv.Itoa(cfg.Port))

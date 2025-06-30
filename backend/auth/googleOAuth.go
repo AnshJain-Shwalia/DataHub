@@ -14,8 +14,16 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// createGoogleAuth creates and returns a new Google OAuth config with the specified redirect URL
-func createGoogleAuth(redirectURL string) *oauth2.Config {
+// createGoogleOAuthConfig initializes and returns a new OAuth2 configuration for Google authentication.
+// The redirectURL parameter specifies where Google should send the user after authentication.
+// This function loads sensitive configuration (client ID and secret) from environment variables.
+//
+// Required scopes:
+//   - userinfo.email: View the user's email address
+//   - userinfo.profile: View basic profile information
+//
+// Returns a configured oauth2.Config ready for use in the OAuth2 flow.
+func createGoogleOAuthConfig(redirectURL string) *oauth2.Config {
 	envCfg := config.LoadConfig()
 	return &oauth2.Config{
 		ClientID:     envCfg.GoogleClientID,
@@ -29,14 +37,31 @@ func createGoogleAuth(redirectURL string) *oauth2.Config {
 	}
 }
 
-// GoogleUserInfo represents the essential user information returned by Google's userinfo endpoint
+// GoogleUserInfo contains the user profile information returned by Google's OAuth2 userinfo endpoint.
+// This struct is used to parse the JSON response from Google's API.
+//
+// Fields:
+//   - Email: The user's email address (validated as a proper email format)
+//   - Name: The user's full name
+//
+// Both fields are marked as required in the binding tag to ensure they are always present.
 type GoogleUserInfo struct {
 	Email string `json:"email" binding:"required,email"`
 	Name  string `json:"name" binding:"required"`
 }
 
-// GetUserInfo retrieves user info from Google's userinfo API using the provided access token
-func GetUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) {
+// GetGoogleUserInfo fetches the authenticated user's profile information from Google's OAuth2 userinfo endpoint.
+//
+// Parameters:
+//   - token: A valid OAuth2 token obtained from Google's token endpoint
+//
+// Returns:
+//   - *GoogleUserInfo: The user's profile information if successful
+//   - error: Any error that occurred during the request or parsing
+//
+// The function includes a 10-second timeout to prevent hanging on slow network requests.
+// It automatically handles the OAuth2 client creation and token management.
+func GetGoogleUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) {
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -71,8 +96,19 @@ func GetUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) {
 	return &userInfo, nil
 }
 
-// GetUserInfoFromAccessToken retrieves user info using just the access token string
-func GetUserInfoFromAccessToken(accessToken string) (*GoogleUserInfo, error) {
+// GetGoogleUserInfoFromAccessToken fetches user profile information using a raw access token string.
+// This is an alternative to GetGoogleUserInfo that doesn't require the full oauth2.Token struct.
+//
+// Parameters:
+//   - accessToken: A valid OAuth2 access token string
+//
+// Returns:
+//   - *GoogleUserInfo: The user's profile information if successful
+//   - error: Any error that occurred during the request or parsing
+//
+// Note: This function makes a direct HTTP request to Google's userinfo endpoint
+// and includes a 10-second timeout to prevent hanging on slow network requests.
+func GetGoogleUserInfoFromAccessToken(accessToken string) (*GoogleUserInfo, error) {
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -114,14 +150,25 @@ func GetUserInfoFromAccessToken(accessToken string) (*GoogleUserInfo, error) {
 	return &userInfo, nil
 }
 
-// ExchangeCodeForTokens exchanges auth code for tokens using the Google library
-func ExchangeCodeForTokens(code string) (*oauth2.Token, error) {
+// ExchangeGoogleCodeForTokens exchanges an OAuth2 authorization code for an access token and refresh token.
+// This is the second step in the OAuth2 authorization code flow.
+//
+// Parameters:
+//   - code: The authorization code received from Google's OAuth2 redirect
+//
+// Returns:
+//   - *oauth2.Token: The access token and refresh token if successful
+//   - error: Any error that occurred during the token exchange
+//
+// The function includes a 10-second timeout and validates that the returned token is valid.
+// The token can be used to make authenticated requests to Google APIs on behalf of the user.
+func ExchangeGoogleCodeForTokens(code string) (*oauth2.Token, error) {
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Create a new config with default redirect URL
-	oauthConfig := createGoogleAuth(config.LoadConfig().GoogleCallbackURL)
+	oauthConfig := createGoogleOAuthConfig(config.LoadConfig().GoogleCallbackURL)
 
 	// Exchange will handle all the HTTP details and parameter encoding
 	token, err := oauthConfig.Exchange(ctx, code)
@@ -134,27 +181,53 @@ func ExchangeCodeForTokens(code string) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("received invalid token from Google")
 	}
 
-	fmt.Println("====TOKEN====")
-	fmt.Println(token)
-	fmt.Println("====TOKEN====")
-
 	return token, nil
 }
 
-// GenerateOAuthURL generates the OAuth2 URL for Google login
-func GenerateOAuthURL(state string) string {
-	oauthConfig := createGoogleAuth(config.LoadConfig().GoogleCallbackURL)
+// GenerateGoogleOAuthURL creates the URL that users should be redirected to for Google OAuth2 authentication.
+// This is the first step in the OAuth2 authorization code flow.
+//
+// Parameters:
+//   - state: A cryptographically random string used to protect against CSRF attacks
+//
+// Returns:
+//   - string: The complete Google OAuth2 authorization URL
+//
+// The generated URL includes:
+// - The client ID from configuration
+// - The default callback URL from configuration
+// - The requested scopes (email and profile)
+// - The provided state parameter for CSRF protection
+// - AccessTypeOffline to request a refresh token
+// - ApprovalForce to ensure the consent screen is always shown
+func GenerateGoogleOAuthURL(state string) string {
+	oauthConfig := createGoogleOAuthConfig(config.LoadConfig().GoogleCallbackURL)
 	return oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
 
-// GenerateOAuthUrlWithRedirectUrl constructs a Google OAuth2 authorization URL using the provided state and redirectURL.
-// If redirectURL is empty, it defaults to "http://localhost:9753/auth/google/callback".
-// This URL can be sent to the frontend to initiate the OAuth login flow.
-func GenerateOAuthUrlWithRedirectUrl(state string, redirectURL string) string {
+// GenerateGoogleOAuthURLWithRedirectURL creates a Google OAuth2 authorization URL with a custom redirect URL.
+// This is a more flexible version of GenerateGoogleOAuthURL that allows specifying a custom redirect URL.
+//
+// Parameters:
+//   - state: A cryptographically random string used to protect against CSRF attacks
+//   - redirectURL: The URL where Google should redirect after authentication.
+//     If empty, falls back to the default callback URL from configuration.
+//
+// Returns:
+//   - string: The complete Google OAuth2 authorization URL
+//
+// The generated URL includes all standard OAuth2 parameters plus:
+// - The provided redirect URL (or default if not specified)
+// - The state parameter for CSRF protection
+// - AccessTypeOffline to request a refresh token
+// - ApprovalForce to ensure the consent screen is always shown
+//
+// This function is useful when you need to override the default callback URL,
+// such as when handling authentication from different domains or environments.
+func GenerateGoogleOAuthURLWithRedirectURL(state string, redirectURL string) string {
 	if redirectURL == "" {
 		redirectURL = config.LoadConfig().GoogleCallbackURL
 	}
-	oauthConfig := createGoogleAuth(redirectURL)
-	// Pass state for CSRF protection, request offline access and force approval prompt
+	oauthConfig := createGoogleOAuthConfig(redirectURL)
 	return oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
