@@ -4,7 +4,7 @@ trigger: always_on
 
 ## 📦 Project Overview: GitHub-as-Cloud Storage
 
-This is a desktop application (Electron) that treats **GitHub repositories as cloud storage** by pushing file chunks into user-owned GitHub repos. The backend, built with **Go using Gin, GORM, gin-swagger, and godotenv**, handles chunk metadata, repository management, and integrates with object storage (e.g. S3-compatible) as a temporary buffer.
+This is a desktop application (Electron) that treats **GitHub repositories as cloud storage** by pushing file chunks into user-owned GitHub repos. The backend, built with **Go using Gin, GORM and gin-swagger**, handles chunk metadata, repository management, and integrates with object storage (e.g. S3-compatible) as a temporary buffer.
 
 ---
 
@@ -90,6 +90,6 @@ Below is an outline of the folder structure for this project. This section serve
 Root Directory  
 │  
 ├── client/               # Electron frontend  
-├── backend/              # Go backend (Gin + GORM + Swagger + godotenv)  
+├── backend/              # Go backend (Gin + GORM + Swagger)  
 ├── lambda/               # Serverless functions (Go/TS)  
 └── README.md             # Project overview

@@ -1,0 +1,87 @@
+// User model
+Table users {
+  id uuid [pk]
+  name varchar(100) [not null]
+  email varchar(255) [not null, unique]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  
+  indexes {
+    email
+  }
+}
+
+// Token model
+Table tokens {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  platform varchar(50) [not null, note: 'can be "GOOGLE" or "GITHUB"']
+  access_token text [not null]
+  access_token_expiry timestamptz
+  refresh_token text
+  refresh_token_expiry timestamptz
+  access_token_issued_at timestamptz [not null]
+  refresh_token_issued_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  
+  indexes {
+    user_id
+    platform
+  }
+}
+
+// Chunk model
+Table chunks {
+  id uuid [pk]
+  file_id uuid [not null, ref: > files.id]
+  rank int [not null]
+  size bigint [not null]
+  path text [not null]
+  branch_id uuid [not null, ref: > branches.id]
+  created_at timestamptz [not null]
+}
+
+// File model
+Table files {
+  id uuid [pk]
+  name text [not null]
+  // pareent folderId, nullable, foreign key to folders.id
+  folder_id uuid [ref: > folders.id]
+  // size in bytes, not nullable
+  size bigint [not null]
+  // userID, not nullable, foreign key to users.id
+  user_id uuid [not null, ref: > users.id]
+  // created at timestamptz, not nullable
+  created_at timestamptz [not null]
+}
+
+// Folder model
+Table folders {
+  // TO BE FILLED.
+  id uuid [pk]
+  name text [not null]
+  parent_folder_id uuid [ref: > folders.id]
+  user_id uuid [not null, ref: > users.id]
+  created_at timestamptz [not null]
+}
+
+// Branch model
+Table branches {
+  // TO BE FILLED.
+  id uuid [pk]
+  name text [not null]
+  repo_id uuid [not null, ref: > repos.id]
+  created_at timestamptz [not null]
+}
+
+// Repo model
+Table repos {
+  // TO BE FILLED.
+  id uuid [pk]
+  github_id text 
+  token_id uuid [not null, ref: > tokens.id]
+  name text [not null]
+  created_at timestamptz [not null]
+}
+

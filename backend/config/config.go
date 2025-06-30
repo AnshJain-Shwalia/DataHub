@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"sync"
 
@@ -9,7 +8,11 @@ import (
 )
 
 type envConfig struct {
-	Port int `env:"PORT,required"`
+	Port               int    `env:"PORT,required"`
+	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
+	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,required"`
+	DatabaseUrl        string `env:"DATABASE_URL,required"`
+	IsProduction       bool   `env:"IS_PRODUCTION" envDefault:"false"`
 }
 
 var (
@@ -18,16 +21,14 @@ var (
 	initErr  error
 )
 
-func LoadConfig() (*envConfig, error) {
+func LoadConfig() *envConfig {
 	once.Do(func() {
 		tmpConfig := &envConfig{}
 		if err := env.Parse(tmpConfig); err != nil {
-			initErr = fmt.Errorf("failed to load config: %w", err)
-			return
+			log.Fatalf("Failed to load config: %v", err)
 		}
 		log.Println("config loaded successfully")
 		instance = tmpConfig
 	})
-	
-	return instance, initErr
+	return instance
 }
