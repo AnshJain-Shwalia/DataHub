@@ -121,7 +121,7 @@ func ExchangeCodeForTokens(code string) (*oauth2.Token, error) {
 	defer cancel()
 
 	// Create a new config with default redirect URL
-	oauthConfig := createGoogleAuth("http://localhost:3000/auth/google/callback")
+	oauthConfig := createGoogleAuth(config.LoadConfig().GoogleCallbackURL)
 
 	// Exchange will handle all the HTTP details and parameter encoding
 	token, err := oauthConfig.Exchange(ctx, code)
@@ -143,16 +143,16 @@ func ExchangeCodeForTokens(code string) (*oauth2.Token, error) {
 
 // GenerateOAuthURL generates the OAuth2 URL for Google login
 func GenerateOAuthURL(state string) string {
-	oauthConfig := createGoogleAuth("http://localhost:3000/auth/google/callback")
+	oauthConfig := createGoogleAuth(config.LoadConfig().GoogleCallbackURL)
 	return oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
 
 // GenerateOAuthUrlWithRedirectUrl constructs a Google OAuth2 authorization URL using the provided state and redirectURL.
-// If redirectURL is empty, it defaults to "http://localhost:3000/auth/google/callback".
+// If redirectURL is empty, it defaults to "http://localhost:9753/auth/google/callback".
 // This URL can be sent to the frontend to initiate the OAuth login flow.
 func GenerateOAuthUrlWithRedirectUrl(state string, redirectURL string) string {
 	if redirectURL == "" {
-		redirectURL = "http://localhost:3000/auth/google/callback"
+		redirectURL = config.LoadConfig().GoogleCallbackURL
 	}
 	oauthConfig := createGoogleAuth(redirectURL)
 	// Pass state for CSRF protection, request offline access and force approval prompt

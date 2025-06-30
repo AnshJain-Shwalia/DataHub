@@ -11,8 +11,12 @@ type envConfig struct {
 	Port               int    `env:"PORT,required"`
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,required"`
+	GoogleCallbackURL  string `env:"GOOGLE_CALLBACK_URL" envDefault:"http://localhost:9753/auth/google/callback"`
 	DatabaseUrl        string `env:"DATABASE_URL,required"`
 	IsProduction       bool   `env:"IS_PRODUCTION" envDefault:"false"`
+	GitHubClientID     string `env:"GITHUB_CLIENT_ID,required"`
+	GitHubClientSecret string `env:"GITHUB_CLIENT_SECRET,required"`
+	GithubCallbackURL  string `env:"GITHUB_CALLBACK_URL" envDefault:"http://localhost:9753/auth/github/callback"`
 }
 
 var (
