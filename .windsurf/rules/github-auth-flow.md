@@ -2,12 +2,12 @@
 trigger: manual
 ---
 
-# Secure Google OAuth Implementation for DataHub
+# Secure GitHub OAuth Implementation for DataHub
 
 ## Architecture Overview
-This implementation uses a distributed architecture where the frontend (Electron app) and backend (cloud service) run on separate machines. The Electron app runs a persistent local HTTP server on port 9753 to handle OAuth callbacks from Google, while the backend runs as a separate cloud service with its own public URL. The authentication flow works as follows: User initiates login → Electron opens browser to Google → Google redirects to http://localhost:9753/auth/google/callback → Electron captures the authorization code → Electron sends code to backend's /auth/google endpoint → Backend exchanges code for tokens with Google → Backend returns JWT to Electron for session management. This separation ensures the OAuth client secret remains secure on the backend while allowing the Electron app to handle the OAuth callback locally
+This implementation uses a distributed architecture where the frontend (Electron app) and backend (cloud service) run on separate machines. The Electron app runs a persistent local HTTP server on port 9753 to handle OAuth callbacks from GitHub, while the backend runs as a separate cloud service with its own public URL. The authentication flow works as follows: User initiates login → Electron opens browser to GitHub → GitHub redirects to http://localhost:9753/auth/github/callback → Electron captures the authorization code → Electron sends code to backend's /auth/github endpoint → Backend exchanges code for tokens with GitHub → Backend returns JWT to Electron for session management. This separation ensures the OAuth client secret remains secure on the backend while allowing the Electron app to handle the OAuth callback locally
 
-User → Electron (port 9753) → Google OAuth → 
+User → Electron (port 9753) → GitHub OAuth → 
 Electron callback (localhost:9753) → 
 Backend API  → 
 JWT back to Electron
@@ -16,14 +16,12 @@ JWT back to Electron
 
 ### A. Initial Setup
 
-1. **Google API Console Setup**:
-   - Create a project in Google Cloud Console
-   - Enable Google Sign-In API
-   - Configure OAuth consent screen (include app name, logo, etc.)
-   - Create OAuth credentials (Web Application type)
-   - Set authorized JavaScript origins to include `http://localhost` and production URLs
-   - Set authorized redirect URIs to include:
-     - `http://localhost:9753/auth/google/callback`
+1. **GitHub OAuth App Setup**:
+   - Go to GitHub Settings → Developer settings → OAuth Apps
+   - Click "New OAuth App"
+   - Fill in application details (app name, homepage URL, description)
+   - Set Authorization callback URL to:
+     - `http://localhost:9753/auth/github/callback`
    - Note your Client ID and Client Secret
 
 2. **Environment Configuration**:
@@ -35,20 +33,20 @@ JWT back to Electron
 1. **OAuth Initialization with Fixed Port**:
    - Use the fixed port 9753 for OAuth callback handling
    - Prepare OAuth configuration with Client ID and the fixed redirect URI:
-     - `http://localhost:9753/auth/google/callback`
+     - `http://localhost:9753/auth/github/callback`
 
 2. **Authentication Flow**:
-   - When user clicks "Sign in with Google" button:
+   - When user clicks "Sign in with GitHub" button:
      - Generate a random state value for CSRF protection
-     - Construct Google authorization URL with required parameters and the fixed port:
-       `redirect_uri=http://localhost:9753/auth/google/callback`
+     - Construct GitHub authorization URL with required parameters and the fixed port:
+       `redirect_uri=http://localhost:9753/auth/github/callback`
      - Open external browser window to this URL
    - If the port is unavailable, show error message:
      "Unable to start authentication service. Please close applications that might be using port 9753 and try again."
 
 3. **Authorization Callback**:
    - Create a local server endpoint to handle the callback on port 9753
-   - When user completes authentication in browser, Google redirects to your callback
+   - When user completes authentication in browser, GitHub redirects to your callback
    - Extract authorization code and state from redirect URL
    - Verify state parameter matches originally sent value
    - Close browser window automatically
@@ -73,23 +71,23 @@ JWT back to Electron
 ### C. Backend Implementation (Go/Gin)
 
 1. **API Endpoint Setup**:
-   - Create a `/auth/google` endpoint that accepts authorization codes
+   - Create a `/auth/github` endpoint that accepts authorization codes
    - Implement proper request validation and error handling
 
 2. **Exchange Code for Tokens**:
-   - Perform the code-for-token exchange with Google's token endpoint
+   - Perform the code-for-token exchange with GitHub's token endpoint
    - Use your Client ID and Client Secret for this exchange
    - Request both access_token and refresh_token
    - Handle HTTP errors and JSON parsing robustly
 
 3. **User Verification**:
-   - Call Google's userinfo endpoint with the access token
-   - Validate email, ensure email is verified
-   - Extract user details (name, email, profile picture, Google ID)
+   - Call GitHub's user API endpoint with the access token
+   - Validate user information and ensure account is active
+   - Extract user details (username, email, name, avatar URL, GitHub ID)
 
 4. **User Account Management**:
    - Check if user exists in your database
-   - If not, create new user record with Google information
+   - If not, create new user record with GitHub information
    - Update existing user information if necessary
    - Associate multiple OAuth providers with same account if needed
 
@@ -100,14 +98,14 @@ JWT back to Electron
    - Return JWT to frontend as authentication token
 
 6. **Token Storage**:
-   - Securely store Google refresh token in your database
+   - Securely store GitHub access token in your database
    - Encrypt sensitive tokens using a strong encryption key
    - Associate tokens with user accounts
 
 7. **Token Refresh Mechanism**:
    - Create endpoint for JWT renewal (e.g., `/auth/refresh`)
    - When backend JWT expires, client requests new JWT
-   - Backend uses stored refresh token to get new Google access token if needed
+   - Backend uses stored access token to verify user status with GitHub if needed
    - Generate and return new JWT to client
 
 8. **Security Measures**:
@@ -118,22 +116,22 @@ JWT back to Electron
 
 9. **Token Revocation**:
    - Implement logout functionality to invalidate sessions
-   - Create mechanism to revoke refresh tokens if needed
-   - Handle cases where Google tokens become invalid
+   - Create mechanism to revoke access tokens if needed
+   - Handle cases where GitHub tokens become invalid
 
 ## Summary
 
 ### Frontend (Electron) Implementation
 - Set up local HTTP server for OAuth callback on fixed port 9753
 - Display error message if port 9753 is occupied
-- Open external browser with Google authorization URL including the fixed port
+- Open external browser with GitHub authorization URL including the fixed port
 - Capture authorization code from callback
 - Send code to backend for token exchange
 - Store and manage JWT for authenticated sessions
 
 ### Backend (Go/Gin) Implementation
 - Handle authorization code from frontend
-- Exchange code for Google tokens
+- Exchange code for GitHub tokens
 - Verify user identity
 - Create and manage user accounts
 - Issue and refresh JWT tokens for session management
