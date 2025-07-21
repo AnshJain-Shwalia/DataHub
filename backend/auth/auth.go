@@ -108,7 +108,7 @@ func GitHubAuthCodeHandler(c *gin.Context) {
 		"message":      "GitHub authentication successful",
 		"access_token": token.AccessToken,
 		"token_type":   token.TokenType,
-		"expires_in":   int(token.Expiry.Sub(time.Now()).Seconds()),
+		"expires_in":   int(time.Until(token.Expiry).Seconds()),
 		"success":      true,
 	})
 }
