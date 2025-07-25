@@ -21,6 +21,8 @@ type envConfig struct {
 	// Server configs
 	Port         int  `env:"PORT,required"`
 	IsProduction bool `env:"IS_PRODUCTION" envDefault:"false"`
+	// JWTSecret
+	JWTSecret string `env:"JWT_SECRET,required"`
 }
 
 var (

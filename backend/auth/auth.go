@@ -5,8 +5,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AnshJain-Shwalia/DataHub/backend/config"
 	"github.com/AnshJain-Shwalia/DataHub/backend/http_util"
+	"github.com/AnshJain-Shwalia/DataHub/backend/models"
+	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type AuthCodeRequest struct {
@@ -38,7 +42,26 @@ func GoogleAuthCodeHandler(c *gin.Context) {
 		return
 	}
 	fmt.Print(token)
-	c.JSON(http.StatusOK, gin.H{"message": "success", "success": true})
+
+	// exchange the token for user info
+	userInfo, err := GetGoogleUserInfo(token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		return
+	}
+	// if the user is not present then create the user.
+	user, err := repositories.CreateUserIfNotPresent(userInfo.Email, userInfo.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		return
+	}
+	// return jwt token.
+	tokenString, err := GenerateJWTToken(user)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "success": true, "token": tokenString})
 }
 
 // GenerateGoogleOAuthURLHandler generates the OAuth URL for Google login
@@ -126,4 +149,21 @@ func GenerateGitHubOAuthURLHandler(c *gin.Context) {
 		"authURL": authURL,
 		"success": true,
 	})
+}
+
+func GenerateJWTToken(user *models.User) (string, error) {
+	expirationTime := time.Now().Add(24 * time.Hour)
+
+	claims := jwt.MapClaims{
+		"id":    user.ID,
+		"email": user.Email,
+		"exp":   expirationTime.Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(config.LoadConfig().JWTSecret))
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
 }
