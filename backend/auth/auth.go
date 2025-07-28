@@ -18,7 +18,25 @@ type AuthCodeRequest struct {
 	State string `json:"state" binding:"required"`
 }
 
-// GoogleAuthCodeHandler handles the OAuth callback from Google
+// GoogleAuthCodeHandler processes the OAuth2 authorization code received from Google's OAuth flow.
+//
+// This handler performs the following steps in sequence:
+// 1. Validates the request body structure containing the authorization code and state parameter
+// 2. Verifies the state parameter to prevent CSRF attacks (one-time use token)
+// 3. Exchanges the authorization code for Google OAuth2 tokens (access and refresh)
+// 4. Retrieves the user's profile information from Google using the obtained tokens
+// 5. Creates a new user account if the user doesn't already exist in the system
+// 6. Stores or updates the user's Google OAuth tokens in the database
+// 7. Generates a JWT token for authenticated access to the application
+//
+// Parameters:
+//   - c *gin.Context: The Gin context containing the HTTP request and response
+//
+// Response:
+//   - Success (200): Returns a JWT token for authenticated API access
+//   - Error (400): Returns detailed error information if any step fails
+//
+// The function handles all error cases with appropriate HTTP status codes and messages.
 func GoogleAuthCodeHandler(c *gin.Context) {
 	var body AuthCodeRequest
 	if err := c.ShouldBindBodyWithJSON(&body); err != nil {
@@ -35,36 +53,37 @@ func GoogleAuthCodeHandler(c *gin.Context) {
 	token, err := ExchangeGoogleCodeForTokens(body.Code)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to exchange authorization code for tokens", err.Error()))
 		return
 	}
 	fmt.Print(token)
 
-	// exchange the token for user info
+	// Exchange the token for user info
 	userInfo, err := GetGoogleUserInfo(token)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to retrieve user information from Google", err.Error()))
 		return
 	}
-	// if the user is not present then create the user.
+	// If the user is not present in our database, create a new user account
 	user, err := repositories.CreateUserIfNotPresent(userInfo.Email, userInfo.Name)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to create or retrieve user account", err.Error()))
 		return
 	}
-	// store the token
+	// Store or update the user's Google OAuth tokens in the database
 	_, err = repositories.UpsertToken(user.ID, "GOOGLE", token.AccessToken, &token.Expiry, &token.RefreshToken, nil)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to store OAuth tokens in database", err.Error()))
 		return
 	}
-	// return jwt token.
+	// Generate a JWT token for authenticated access to the application
 	tokenString, err := GenerateJWTToken(user)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to generate authentication token", err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "success": true, "token": tokenString})
+	// Return success response with JWT token
+	c.JSON(http.StatusOK, gin.H{"message": "Authentication successful", "success": true, "token": tokenString})
 }
 
 // GenerateGoogleOAuthURLHandler generates the OAuth URL for Google login
