@@ -18,9 +18,6 @@ type AuthCodeRequest struct {
 	State string `json:"state" binding:"required"`
 }
 
-// Removed GenerateOAuthURLRequest struct for security reasons
-// Now using fixed redirect URLs from config
-
 // GoogleAuthCodeHandler handles the OAuth callback from Google
 func GoogleAuthCodeHandler(c *gin.Context) {
 	var body AuthCodeRequest
@@ -51,6 +48,12 @@ func GoogleAuthCodeHandler(c *gin.Context) {
 	}
 	// if the user is not present then create the user.
 	user, err := repositories.CreateUserIfNotPresent(userInfo.Email, userInfo.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
+		return
+	}
+	// store the token
+	_, err = repositories.UpsertToken(user.ID, "GOOGLE", token.AccessToken, &token.Expiry, &token.RefreshToken, nil)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Problem in exchanging code for token", err.Error()))
 		return
