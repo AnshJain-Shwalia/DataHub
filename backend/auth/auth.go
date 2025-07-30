@@ -7,6 +7,7 @@ import (
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
 	"github.com/AnshJain-Shwalia/DataHub/backend/http_util"
+	"github.com/AnshJain-Shwalia/DataHub/backend/middleware"
 	"github.com/AnshJain-Shwalia/DataHub/backend/models"
 	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
 	"github.com/gin-gonic/gin"
@@ -102,59 +103,115 @@ func GenerateGoogleOAuthURLHandler(c *gin.Context) {
 	})
 }
 
-// GitHubAuthCodeHandler handles the OAuth callback from GitHub
-// GitHub will call this endpoint with the following query parameters:
-// - code: The authorization code that can be exchanged for an access token
-// - state: The unguessable random string you provided in the initial request
-// - error: (optional) If there was an error during authorization
-// - error_description: (optional) Description of the error
-// - error_uri: (optional) URI to a page with more information about the error
-func GitHubAuthCodeHandler(c *gin.Context) {
-	// First check for OAuth errors
-	if errMsg := c.Query("error"); errMsg != "" {
-		errDescription := c.Query("error_description")
-		err := fmt.Errorf("GitHub OAuth error: %s", errMsg)
-		if errDescription != "" {
-			err = fmt.Errorf("%s: %s", err, errDescription)
-		}
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "GitHub authorization failed", err.Error()))
+// AddGitHubAccountHandler processes the OAuth2 authorization code received from GitHub's OAuth flow
+// to link a GitHub storage account to an already authenticated user.
+//
+// This handler performs the following steps in sequence:
+// 1. Extracts user ID from JWT token (user must be already authenticated)
+// 2. Validates the request body structure containing the authorization code and state parameter
+// 3. Verifies the state parameter to prevent CSRF attacks (one-time use token)
+// 4. Exchanges the authorization code for GitHub OAuth2 tokens (access token)
+// 5. Retrieves the user's profile information from GitHub using the obtained tokens
+// 6. Links the GitHub account to the existing authenticated user (no new user creation)
+// 7. Stores the GitHub OAuth token with account identifier to support multiple GitHub accounts
+//
+// Parameters:
+//   - c *gin.Context: The Gin context containing the HTTP request and response (JWT required in Authorization header)
+//
+// Response:
+//   - Success (200): Returns confirmation of GitHub account linking
+//   - Error (400/401): Returns detailed error information if any step fails
+//
+// The function handles all error cases with appropriate HTTP status codes and messages.
+func AddGitHubAccountHandler(c *gin.Context) {
+	// Extract user ID from JWT token (user must be already authenticated)
+	userID := middleware.GetUserIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, http_util.NewErrorResponse(http.StatusUnauthorized, "User ID not found in token", nil))
 		return
 	}
 
-	// Get the authorization code
-	code := c.Query("code")
-	if code == "" {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "No authorization code provided by GitHub", "missing_code"))
+	var body AuthCodeRequest
+	if err := c.ShouldBindBodyWithJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Incorrect body structure", err.Error()))
 		return
 	}
 
-	// Verify the state parameter to prevent CSRF attacks
-	state := c.Query("state")
-	if state == "" || !VerifyAndConsumeState(state) {
-		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Invalid or missing state parameter", "invalid_state"))
+	// Check state BEFORE processing the code
+	if !VerifyAndConsumeState(body.State) {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Invalid state parameter", nil))
 		return
 	}
 
 	// Exchange the authorization code for an access token
-	token, err := ExchangeGitHubCodeForTokens(code)
+	token, err := ExchangeGitHubCodeForTokens(body.Code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, http_util.NewErrorResponse(http.StatusInternalServerError, "Failed to exchange authorization code for access token", err.Error()))
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to exchange authorization code for tokens", err.Error()))
 		return
 	}
 
-	// In a real application, you would:
-	// 1. Store the token securely (encrypted in the database)
-	// 2. Associate it with the current user's session
-	// 3. Return a session token to the client
+	// Exchange the token for user info
+	userInfo, err := GetGitHubUserInfo(token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to retrieve user information from GitHub", err.Error()))
+		return
+	}
 
-	// For now, we'll just return a success message with the token
-	// In production, never expose the raw token to the client
+	// Store the GitHub OAuth token with account identifier (GitHub username) for the authenticated user
+	_, err = repositories.CreateOrUpdateGitHubToken(userID, userInfo.Login, token.AccessToken, &token.Expiry, nil, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "Failed to store GitHub OAuth token in database", err.Error()))
+		return
+	}
+
+	// Return success response confirming GitHub account linking
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "GitHub authentication successful",
-		"access_token": token.AccessToken,
-		"token_type":   token.TokenType,
-		"expires_in":   int(time.Until(token.Expiry).Seconds()),
-		"success":      true,
+		"message": "GitHub account linked successfully", 
+		"success": true, 
+		"githubUsername": userInfo.Login,
+	})
+}
+
+// GetGitHubAccountsHandler lists all connected GitHub accounts for the authenticated user.
+//
+// This handler performs the following steps:
+// 1. Extracts user ID from JWT token (user must be already authenticated)
+// 2. Retrieves all GitHub tokens associated with the user from the database
+// 3. Returns a list of connected GitHub usernames
+//
+// Parameters:
+//   - c *gin.Context: The Gin context containing the HTTP request and response (JWT required in Authorization header)
+//
+// Response:
+//   - Success (200): Returns list of connected GitHub usernames
+//   - Error (401/500): Returns detailed error information if any step fails
+func GetGitHubAccountsHandler(c *gin.Context) {
+	// Extract user ID from JWT token (user must be already authenticated)
+	userID := middleware.GetUserIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, http_util.NewErrorResponse(http.StatusUnauthorized, "User ID not found in token", nil))
+		return
+	}
+
+	// Get all GitHub tokens for the user
+	githubTokens, err := repositories.GetGitHubTokensForUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, http_util.NewErrorResponse(http.StatusInternalServerError, "Failed to retrieve GitHub accounts", err.Error()))
+		return
+	}
+
+	// Extract GitHub usernames from the tokens
+	var githubUsernames []string
+	for _, token := range githubTokens {
+		if token.AccountIdentifier != nil {
+			githubUsernames = append(githubUsernames, *token.AccountIdentifier)
+		}
+	}
+
+	// Return the list of GitHub accounts
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"accounts": githubUsernames,
 	})
 }
 

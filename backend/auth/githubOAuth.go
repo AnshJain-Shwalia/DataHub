@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-resty/resty/v2"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 )
@@ -140,4 +142,77 @@ func GenerateGitHubOAuthURLWithRedirectURL(state string, redirectURL string) str
 	}
 
 	return oauthConfig.AuthCodeURL(state, opts...)
+}
+
+// GitHubUserInfo contains the user profile information returned by GitHub's OAuth2 user endpoint.
+// This struct is used to parse the JSON response from GitHub's API.
+//
+// Fields:
+//   - Login: The user's GitHub username (used as unique identifier)
+//   - Name: The user's display name (can be empty)
+//   - Email: The user's primary email address (can be empty if private)
+//   - ID: The user's unique GitHub ID (numeric)
+//
+// Login is marked as required since it's used as the account identifier.
+type GitHubUserInfo struct {
+	Login string  `json:"login" binding:"required"`           // GitHub username
+	Name  *string `json:"name"`                               // Display name (optional)
+	Email *string `json:"email"`                              // Primary email (optional, can be private)
+	ID    int64   `json:"id" binding:"required"`              // Unique GitHub user ID
+}
+
+// GetGitHubUserInfo fetches the authenticated user's profile information from GitHub's OAuth2 user endpoint.
+//
+// Parameters:
+//   - token: A valid OAuth2 token obtained from GitHub's token endpoint
+//
+// Returns:
+//   - *GitHubUserInfo: The user's profile information if successful
+//   - error: Any error that occurred during the request or parsing
+//
+// The function includes a 10-second timeout to prevent hanging on slow network requests.
+func GetGitHubUserInfo(token *oauth2.Token) (*GitHubUserInfo, error) {
+	return GetGitHubUserInfoFromAccessToken(token.AccessToken)
+}
+
+// GetGitHubUserInfoFromAccessToken fetches user profile information using a raw access token string.
+// This function uses resty HTTP client with proper timeout and error handling.
+//
+// Parameters:
+//   - accessToken: A valid OAuth2 access token string
+//
+// Returns:
+//   - *GitHubUserInfo: The user's profile information if successful
+//   - error: Any error that occurred during the request or parsing
+func GetGitHubUserInfoFromAccessToken(accessToken string) (*GitHubUserInfo, error) {
+	// Create resty client with timeout
+	client := resty.New().
+		SetTimeout(10 * time.Second).
+		SetHeader("Accept", "application/vnd.github.v3+json").
+		SetAuthToken(accessToken)
+
+	var userInfo GitHubUserInfo
+	var errorResponse map[string]interface{}
+
+	// Make the request
+	resp, err := client.R().
+		SetResult(&userInfo).
+		SetError(&errorResponse).
+		Get("https://api.github.com/user")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user info: %v", err)
+	}
+
+	// Check if the response was successful
+	if !resp.IsSuccess() {
+		return nil, fmt.Errorf("GitHub API request failed with status %d: %v", resp.StatusCode(), errorResponse)
+	}
+
+	// Validate using Gin's validator
+	if err := binding.Validator.ValidateStruct(userInfo); err != nil {
+		return nil, fmt.Errorf("invalid user info received from GitHub: %v", err)
+	}
+
+	return &userInfo, nil
 }
