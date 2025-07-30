@@ -174,7 +174,7 @@ func GenerateGitHubOAuthURLHandler(c *gin.Context) {
 }
 
 func GenerateJWTToken(user *models.User) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
+	expirationTime := time.Now().Add(24 * time.Hour * 7)
 
 	claims := jwt.MapClaims{
 		"id":    user.ID,
