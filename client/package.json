@@ -10,7 +10,7 @@
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "webpack --config webpack.main.config.js --mode production",
     "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
-    "start": "npx electron .",
+    "start": "NODE_ENV=production npx electron . --no-sandbox",
     "package": "electron-builder",
     "clean": "rimraf dist"
   },

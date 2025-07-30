@@ -21,7 +21,7 @@ const electronAPI = {
   },
 };
 
-// Expose the API to the renderer process
+// Expose the API to the renderer process securely
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
 // Type definitions for the exposed API

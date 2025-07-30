@@ -48,18 +48,19 @@ class MainApp {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        sandbox: false, // Disable sandbox to avoid permission issues
       },
       icon: isDev ? undefined : path.join(__dirname, '../../assets/icon.png'),
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     });
 
-    // Load the app
-    if (isDev) {
-      this.mainWindow.loadURL('http://localhost:3000');
-      this.mainWindow.webContents.openDevTools();
-    } else {
+    // Load the app - Force production mode
+    // if (isDev) {
+    //   this.mainWindow.loadURL('http://localhost:3000');
+    //   this.mainWindow.webContents.openDevTools();
+    // } else {
       this.mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-    }
+    // }
 
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
