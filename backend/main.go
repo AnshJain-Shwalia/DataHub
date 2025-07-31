@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/auth"
@@ -11,16 +12,36 @@ import (
 )
 
 func main() {
+	log.Println("Starting DataHub backend server...")
+	
 	cfg := config.LoadConfig()
+	log.Printf("Configuration loaded - Port: %d", cfg.Port)
+	
+	log.Println("Connecting to database...")
 	_, err := db.ConnectDB()
 	if err != nil {
-		panic("failed to connect to database: " + err.Error())
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
+	log.Println("Database connection established")
+	
+	log.Println("Running database migrations...")
 	err = db.AutoMigrate()
 	if err != nil {
-		panic("failed to migrate database: " + err.Error())
+		log.Fatalf("Failed to migrate database: %v", err)
 	}
+	log.Println("Database migrations completed")
+	
+	log.Println("Setting up routes...")
 	router := gin.Default()
+	
+	// Health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"message": "DataHub backend is running",
+		})
+	})
+	
 	authGroup := router.Group("/auth")
 	{
 		// Google OAuth routes
@@ -40,5 +61,11 @@ func main() {
 			githubGroup.GET("/oauth-url", auth.GenerateGitHubOAuthURLHandler)
 		}
 	}
-	router.Run(":" + strconv.Itoa(cfg.Port))
+	
+	log.Printf("Server starting on port %d...", cfg.Port)
+	log.Printf("Server running at http://localhost:%d", cfg.Port)
+	
+	if err := router.Run(":" + strconv.Itoa(cfg.Port)); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }

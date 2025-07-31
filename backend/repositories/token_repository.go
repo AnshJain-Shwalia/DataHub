@@ -6,6 +6,7 @@ import (
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/db"
 	"github.com/AnshJain-Shwalia/DataHub/backend/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -67,6 +68,7 @@ func CreateTokenWithAccountIdentifier(
 	
 	// Create token struct with provided data and current timestamps
 	token := &models.Token{
+		ID:                   uuid.New().String(),
 		UserID:               userID,
 		Platform:             platform,
 		AccountIdentifier:    accountIdentifier,
