@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
+	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
 	"github.com/gin-gonic/gin/binding"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -230,4 +231,109 @@ func GenerateGoogleOAuthURLWithRedirectURL(state string, redirectURL string) str
 	}
 	oauthConfig := createGoogleOAuthConfig(redirectURL)
 	return oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+}
+
+// IsGoogleRefreshTokenValid checks if a Google refresh token is valid by attempting to use it
+//
+// Parameters:
+//   - tokenID: The ID of the token to validate
+//
+// Returns:
+//   - bool: true if the refresh token is valid, false otherwise
+func IsGoogleRefreshTokenValid(tokenID string) bool {
+	token, err := repositories.GetTokenByID(tokenID)
+	if err != nil || token.RefreshToken == nil {
+		return false
+	}
+
+	oauthConfig := createGoogleOAuthConfig(config.LoadConfig().GoogleCallbackURL)
+	
+	// Create a token with just the refresh token
+	oauthToken := &oauth2.Token{
+		RefreshToken: *token.RefreshToken,
+		Expiry: time.Now().Add(-time.Hour), // Force refresh by setting expired time
+	}
+	
+	tokenSource := oauthConfig.TokenSource(context.Background(), oauthToken)
+	_, err = tokenSource.Token()
+	return err == nil
+}
+
+// IsGoogleAccessTokenValid checks if a Google access token is valid by making a request to Google's userinfo endpoint
+//
+// Parameters:
+//   - tokenID: The ID of the token to validate
+//
+// Returns:
+//   - bool: true if the access token is valid, false otherwise
+func IsGoogleAccessTokenValid(tokenID string) bool {
+	token, err := repositories.GetTokenByID(tokenID)
+	if err != nil {
+		return false
+	}
+
+	_, err = GetGoogleUserInfoFromAccessToken(token.AccessToken)
+	return err == nil
+}
+
+// GoogleAccessTokenValidityLeft returns the remaining validity duration of a Google access token
+//
+// Parameters:
+//   - tokenID: The ID of the token to check
+//
+// Returns:
+//   - time.Duration: The remaining validity duration, 0 if expired or invalid
+func GoogleAccessTokenValidityLeft(tokenID string) time.Duration {
+	token, err := repositories.GetTokenByID(tokenID)
+	if err != nil || token.AccessTokenExpiry == nil {
+		return 0
+	}
+
+	now := time.Now()
+	if token.AccessTokenExpiry.Before(now) {
+		return 0
+	}
+
+	return token.AccessTokenExpiry.Sub(now)
+}
+
+// RefreshGoogleAccessToken refreshes a Google access token using the stored refresh token
+//
+// Parameters:
+//   - tokenID: The ID of the token to refresh
+//
+// Returns:
+//   - error: nil if successful, error if refresh failed
+func RefreshGoogleAccessToken(tokenID string) error {
+	token, err := repositories.GetTokenByID(tokenID)
+	if err != nil {
+		return fmt.Errorf("failed to get token: %v", err)
+	}
+
+	if token.RefreshToken == nil {
+		return fmt.Errorf("no refresh token available")
+	}
+
+	oauthConfig := createGoogleOAuthConfig(config.LoadConfig().GoogleCallbackURL)
+	
+	// Create oauth2.Token with current values
+	oauthToken := &oauth2.Token{
+		AccessToken:  token.AccessToken,
+		RefreshToken: *token.RefreshToken,
+		Expiry:       time.Now().Add(-time.Hour), // Force refresh
+	}
+	
+	tokenSource := oauthConfig.TokenSource(context.Background(), oauthToken)
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		return fmt.Errorf("failed to refresh token: %v", err)
+	}
+
+	// Update the token in database
+	_, err = repositories.UpdateToken(token, newToken.AccessToken, &newToken.Expiry, &newToken.RefreshToken, nil)
+	if err != nil {
+		return fmt.Errorf("failed to update token in database: %v", err)
+	}
+
+	return nil
 }

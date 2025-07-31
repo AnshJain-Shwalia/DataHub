@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
+	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-resty/resty/v2"
 	"golang.org/x/oauth2"
@@ -215,4 +216,21 @@ func GetGitHubUserInfoFromAccessToken(accessToken string) (*GitHubUserInfo, erro
 	}
 
 	return &userInfo, nil
+}
+
+// IsGitHubAccessTokenValid checks if a GitHub access token is valid by making a request to GitHub's user endpoint
+//
+// Parameters:
+//   - tokenID: The ID of the token to validate
+//
+// Returns:
+//   - bool: true if the access token is valid, false otherwise
+func IsGitHubAccessTokenValid(tokenID string) bool {
+	token, err := repositories.GetTokenByID(tokenID)
+	if err != nil {
+		return false
+	}
+
+	_, err = GetGitHubUserInfoFromAccessToken(token.AccessToken)
+	return err == nil
 }

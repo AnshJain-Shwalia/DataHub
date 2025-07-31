@@ -218,3 +218,20 @@ func GetGitHubTokensForUser(userID string) ([]models.Token, error) {
 	err := db.DB.Where("user_id = ? AND platform = ?", userID, "GITHUB").Find(&tokens).Error
 	return tokens, err
 }
+
+// GetTokenByID retrieves a token by its ID
+//
+// Parameters:
+//   - tokenID: The ID of the token to retrieve
+//
+// Returns:
+//   - A pointer to the Token model if found
+//   - An error if the database operation fails or token not found
+func GetTokenByID(tokenID string) (*models.Token, error) {
+	var token models.Token
+	err := db.DB.Where("id = ?", tokenID).First(&token).Error
+	if err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
