@@ -16,6 +16,7 @@ Table tokens {
   id uuid [pk]
   user_id uuid [not null, ref: > users.id]
   platform varchar(50) [not null, note: 'can be "GOOGLE" or "GITHUB"']
+  account_identifier varchar(255) [note: 'GitHub username or Google email - prevents duplicate tokens per account']
   access_token text [not null]
   access_token_expiry timestamptz
   refresh_token text
@@ -28,6 +29,8 @@ Table tokens {
   indexes {
     user_id
     platform
+    account_identifier
+    (user_id, platform, account_identifier) [unique]
   }
 }
 
@@ -37,51 +40,68 @@ Table chunks {
   file_id uuid [not null, ref: > files.id]
   rank int [not null]
   size bigint [not null]
-  path text [not null]
-  branch_id uuid [not null, ref: > branches.id]
+  s3_path text [note: 'S3 object key when in buffer, e.g. "chunks/user-123/file-456/chunk-001.bin"']
+  git_path text [note: 'File path in GitHub repo when pushed, e.g. "data/chunks/chunk-abc123.bin"']
+  branch_id uuid [ref: > branches.id, note: 'Nullable - null when chunk is only in S3 buffer']
+  status varchar(20) [not null, default: 'BUFFERED', note: 'BUFFERED, PUSHED, or FAILED']
   created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  
+  indexes {
+    file_id
+    branch_id
+  }
 }
 
 // File model
 Table files {
   id uuid [pk]
   name text [not null]
-  // pareent folderId, nullable, foreign key to folders.id
-  folder_id uuid [ref: > folders.id]
-  // size in bytes, not nullable
-  size bigint [not null]
-  // userID, not nullable, foreign key to users.id
+  folder_id uuid [ref: > folders.id, note: 'Parent folder - nullable for orphan files']
+  size bigint [not null, note: 'File size in bytes']
   user_id uuid [not null, ref: > users.id]
-  // created at timestamptz, not nullable
   created_at timestamptz [not null]
+  
+  indexes {
+    user_id
+  }
 }
 
 // Folder model
 Table folders {
-  // TO BE FILLED.
   id uuid [pk]
   name text [not null]
-  parent_folder_id uuid [ref: > folders.id]
+  parent_folder_id uuid [ref: > folders.id, note: 'Self-referencing for hierarchical structure']
   user_id uuid [not null, ref: > users.id]
   created_at timestamptz [not null]
+  
+  indexes {
+    user_id
+  }
 }
 
 // Branch model
 Table branches {
-  // TO BE FILLED.
   id uuid [pk]
-  name text [not null]
+  name text [not null, note: 'Git branch name']
   repo_id uuid [not null, ref: > repos.id]
   created_at timestamptz [not null]
+  
+  indexes {
+    repo_id
+  }
 }
 
 // Repo model
 Table repos {
-  // TO BE FILLED.
   id uuid [pk]
-  github_id text 
-  token_id uuid [not null, ref: > tokens.id]
-  name text [not null]
+  github_id text [note: 'GitHub repository ID from API']
+  token_id uuid [not null, ref: > tokens.id, note: 'Links to GitHub OAuth token']
+  name text [not null, note: 'Repository name']
   created_at timestamptz [not null]
+  
+  indexes {
+    token_id
+  }
 }
 
