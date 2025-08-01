@@ -267,11 +267,174 @@ function makeAuthenticatedRequest(url, options):
 
 ## Database Models (GORM)
 
-Key entities in `/backend/models/`:
-- **User**: OAuth user information
-- **Token**: JWT token management with expiration
-- **Repo** → **Branch** → **Folder**/**File** → **Chunk** hierarchy
-- **Repositories**: Data access layer for User and Token operations
+### Core Entity Overview
+The database follows a hierarchical structure optimized for distributed file storage across GitHub repositories:
+
+**Authentication Layer**: `User` ↔ `Token` (OAuth credentials)
+**Storage Layer**: `Repo` → `Branch` → `Chunk` (GitHub storage hierarchy)  
+**File System Layer**: `User` → `Folder` → `File` → `Chunk` (user file organization)
+
+### Model Definitions (`/backend/models/`)
+
+#### User (`user.go`)
+**Purpose**: Core user account management for OAuth authentication
+```go
+type User struct {
+    ID        string    // UUID primary key
+    Name      string    // Display name from OAuth provider
+    Email     string    // Unique email address (indexed)
+    Tokens    []Token   // Associated OAuth tokens (not stored in DB)
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+```
+- **Authentication**: Single user per email address with Google OAuth signup
+- **Relationships**: One-to-many with Token, Folder, and File entities
+- **Indexing**: Email field indexed for fast login lookups
+
+#### Token (`token.go`) 
+**Purpose**: OAuth token storage with multi-platform support and duplicate prevention
+```go
+type Token struct {
+    ID                   string     // UUID primary key
+    UserID               string     // Foreign key to User
+    Platform             string     // "GOOGLE" or "GITHUB"
+    AccountIdentifier    *string    // GitHub username or Google email
+    AccessToken          string     // OAuth access token (encrypted)
+    AccessTokenExpiry    *time.Time // Token expiration
+    RefreshToken         *string    // OAuth refresh token (encrypted)
+    RefreshTokenExpiry   *time.Time
+    AccessTokenIssuedAt  time.Time
+    RefreshTokenIssuedAt *time.Time
+    CreatedAt            time.Time
+    UpdatedAt            time.Time
+}
+```
+- **Multi-Platform**: Supports both Google (authentication) and GitHub (storage) tokens
+- **Duplicate Prevention**: Unique constraint on (UserID, Platform, AccountIdentifier)
+- **Token Management**: Full OAuth2 lifecycle with access/refresh token tracking
+- **Security**: Tokens encrypted at rest with expiration monitoring
+
+#### Repo (`repo.go`)
+**Purpose**: GitHub repository metadata for distributed storage
+```go
+type Repo struct {
+    ID        string    // UUID primary key
+    GithubID  *string   // GitHub repository ID from API
+    TokenID   string    // Foreign key to GitHub Token
+    Name      string    // Repository name
+    Branches  []Branch  // Associated branches (not stored in DB)
+    CreatedAt time.Time
+}
+```
+- **GitHub Integration**: Links to actual GitHub repositories via OAuth tokens
+- **Storage Organization**: Each repo can contain multiple branches for data organization
+- **Token Association**: Tied to specific GitHub OAuth tokens for access control
+
+#### Branch (`branch.go`)
+**Purpose**: Git branch organization within repositories for chunk storage
+```go
+type Branch struct {
+    ID        string    // UUID primary key
+    Name      string    // Git branch name
+    RepoID    string    // Foreign key to Repo
+    Chunks    []Chunk   // File chunks stored in this branch (not stored in DB)
+    CreatedAt time.Time
+}
+```
+- **Git Integration**: Represents actual Git branches in GitHub repositories
+- **Chunk Organization**: Branches contain file chunks pushed to GitHub
+- **Storage Strategy**: Separate branches can isolate different data types or users
+
+#### Folder (`folder.go`)
+**Purpose**: Hierarchical folder structure for user file organization
+```go
+type Folder struct {
+    ID             string    // UUID primary key
+    Name           string    // Folder name
+    ParentFolderID *string   // Self-referencing for hierarchy
+    ParentFolder   *Folder   // Parent folder relationship
+    UserID         string    // Foreign key to User (indexed)
+    Files          []File    // Files in this folder (not stored in DB)
+    Subfolders     []Folder  // Child folders (not stored in DB)
+    CreatedAt      time.Time
+}
+```
+- **Hierarchical Structure**: Self-referencing tree structure for nested folders
+- **User Isolation**: Each folder belongs to a specific user
+- **File Organization**: Provides familiar file system structure over distributed storage
+
+#### File (`file.go`)
+**Purpose**: File metadata with chunking information for large file handling
+```go
+type File struct {
+    ID        string    // UUID primary key
+    Name      string    // Original filename
+    FolderID  *string   // Optional parent folder
+    Size      int64     // Total file size in bytes
+    UserID    string    // Foreign key to User (indexed)
+    Chunks    []Chunk   // File chunks (not stored in DB)
+    CreatedAt time.Time
+}
+```
+- **Chunking Support**: Large files split into 5MB chunks for GitHub storage
+- **Size Tracking**: Maintains original file size for reconstruction
+- **User Ownership**: Files belong to specific users with folder organization
+- **Orphan Support**: Files can exist without folders (FolderID nullable)
+
+#### Chunk (`chunk.go`)
+**Purpose**: Individual file chunks stored in GitHub repositories with ordering
+```go
+type Chunk struct {
+    ID        string    // UUID primary key
+    FileID    string    // Foreign key to File (indexed)
+    Rank      int       // Chunk order for file reconstruction
+    Size      int64     // Chunk size in bytes (≤5MB)
+    Path      string    // File path in GitHub repository
+    BranchID  string    // Foreign key to Branch (indexed)
+    CreatedAt time.Time
+}
+```
+- **File Reconstruction**: Rank field ensures proper chunk ordering during download
+- **GitHub Storage**: Path field maps to actual file location in repository
+- **Size Limits**: Each chunk ≤5MB to comply with GitHub file size limits
+- **Distribution**: Chunks distributed across branches and repositories for load balancing
+
+### Database Relationships
+
+#### Primary Relationships
+- `User` → `Token` (1:N) - Users can have multiple OAuth tokens
+- `User` → `Folder` (1:N) - Users own their folder hierarchies  
+- `User` → `File` (1:N) - Users own their files
+- `Token` → `Repo` (1:N) - GitHub tokens can access multiple repositories
+- `Repo` → `Branch` (1:N) - Repositories contain multiple branches
+- `Branch` → `Chunk` (1:N) - Branches store file chunks
+- `File` → `Chunk` (1:N) - Files split into ordered chunks
+- `Folder` → `Folder` (1:N) - Hierarchical folder structure
+- `Folder` → `File` (1:N) - Folders contain files
+
+#### Key Constraints
+- **User.Email**: UNIQUE constraint prevents duplicate accounts
+- **Token (UserID, Platform, AccountIdentifier)**: UNIQUE constraint prevents duplicate OAuth tokens
+- **Chunk.Rank**: Ordering constraint ensures proper file reconstruction
+- **Foreign Keys**: Enforced referential integrity across all relationships
+
+### Storage Architecture Integration
+
+#### File Upload Flow
+1. **File** metadata created with total size
+2. **File** split into **Chunks** (≤5MB each) with rank ordering
+3. **Chunks** uploaded to S3 temporary buffer
+4. Serverless function pushes **Chunks** to **GitHub** via **Branch**/**Repo**
+5. **Chunk** records updated with GitHub **Path** locations
+
+#### File Download Flow  
+1. Query **File** metadata and associated **Chunks** by rank
+2. Retrieve **Chunk** locations from **Branch**/**Repo** GitHub paths
+3. Git sparse checkout to download specific **Chunks**
+4. Reassemble **Chunks** in rank order to reconstruct original **File**
+
+This model design supports DataHub's core functionality of treating GitHub repositories as distributed cloud storage while maintaining familiar file system semantics for users.
 
 ## API Endpoints
 
