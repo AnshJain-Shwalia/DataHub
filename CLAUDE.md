@@ -15,7 +15,7 @@ DataHub is a GitHub-as-cloud-storage desktop application built with **Electron f
 - **Frontend**: Electron desktop app
 - **Backend**: Go with Gin (HTTP), GORM (PostgreSQL ORM), gin-swagger (API docs)
 - **Database**: PostgreSQL (with optional Redis for caching)
-- **Temporary Storage**: S3-compatible (AWS S3, Cloudflare R2)
+- **Temporary Storage**: S3-compatible (AWS S3, Cloudflare R2) - automatically deleted after GitHub push
 - **Permanent Storage**: GitHub repositories via OAuth
 - **Authentication**: Google OAuth (user signup/login only) + GitHub OAuth (storage account linking for authenticated users)
 - **Serverless**: Platform-agnostic functions (Go/TypeScript) in `/lambda/`
@@ -257,8 +257,15 @@ function makeAuthenticatedRequest(url, options):
 ```
 
 ### File Storage Flow
-1. **Upload**: Files >5MB chunked → S3 buffer → Serverless function pushes to GitHub → Metadata in PostgreSQL
+1. **Upload**: Files >5MB chunked → S3 temporary buffer → Serverless function pushes to GitHub → S3 cleanup → Metadata in PostgreSQL
 2. **Download**: Client queries metadata → Git sparse checkout → Chunk reassembly
+
+### S3 Temporary Storage Management
+- **Purpose**: S3 acts as a temporary buffer only, not permanent storage
+- **Lifecycle**: Upload → Lambda processing → GitHub push → **Automatic S3 deletion**
+- **Cleanup**: Lambda function must delete S3 objects after successful GitHub push to minimize storage costs
+- **Retention**: Objects should be retained only during processing (minutes to hours, not days)
+- **Error Handling**: Failed pushes may require retry mechanism or manual cleanup
 
 ### System Limits
 - **Chunk size**: Max 5MB per chunk
@@ -426,7 +433,8 @@ type Chunk struct {
 2. **File** split into **Chunks** (≤5MB each) with rank ordering
 3. **Chunks** uploaded to S3 temporary buffer
 4. Serverless function pushes **Chunks** to **GitHub** via **Branch**/**Repo**
-5. **Chunk** records updated with GitHub **Path** locations
+5. **S3 objects deleted** automatically after successful GitHub push
+6. **Chunk** records updated with GitHub **Path** locations
 
 #### File Download Flow  
 1. Query **File** metadata and associated **Chunks** by rank
