@@ -249,7 +249,8 @@ func GetSigninTokenByIDHandler(c *gin.Context) {
 	// Generate JWT token for the user
 	tokenString, err := GenerateJWTToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, http_util.NewErrorResponse(http.StatusInternalServerError, "Failed to generate token", err.Error()))
+		log.Printf("Failed to generate token for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, http_util.NewErrorResponse(http.StatusInternalServerError, "Failed to generate token", nil))
 		return
 	}
 
