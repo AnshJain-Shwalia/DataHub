@@ -4,9 +4,9 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/AnshJain-Shwalia/DataHub/backend/auth"
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
 	"github.com/AnshJain-Shwalia/DataHub/backend/db"
+	"github.com/AnshJain-Shwalia/DataHub/backend/handlers/auth"
 	"github.com/AnshJain-Shwalia/DataHub/backend/middleware"
 	"github.com/gin-gonic/gin"
 )
