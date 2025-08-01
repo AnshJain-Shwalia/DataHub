@@ -230,6 +230,41 @@ func GenerateGitHubOAuthURLHandler(c *gin.Context) {
 	})
 }
 
+// TTBD: Temporary endpoint for development - generates JWT token by user ID without authentication
+// This endpoint bypasses normal OAuth flow and should be removed before production
+func GetSigninTokenByIDHandler(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, http_util.NewErrorResponse(http.StatusBadRequest, "User ID is required", nil))
+		return
+	}
+
+	// Find user by ID
+	user, err := repositories.FindUserByID(userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, http_util.NewErrorResponse(http.StatusNotFound, "User not found", err.Error()))
+		return
+	}
+
+	// Generate JWT token for the user
+	tokenString, err := GenerateJWTToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, http_util.NewErrorResponse(http.StatusInternalServerError, "Failed to generate token", err.Error()))
+		return
+	}
+
+	// Return the JWT token
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"token":   tokenString,
+		"user": gin.H{
+			"id":    user.ID,
+			"email": user.Email,
+			"name":  user.Name,
+		},
+	})
+}
+
 func GenerateJWTToken(user *models.User) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour * 7)
 
