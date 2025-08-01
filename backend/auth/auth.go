@@ -242,7 +242,7 @@ func GetSigninTokenByIDHandler(c *gin.Context) {
 	// Find user by ID
 	user, err := repositories.FindUserByID(userID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, http_util.NewErrorResponse(http.StatusNotFound, "User not found", err.Error()))
+		c.JSON(http.StatusNotFound, http_util.NewErrorResponse(http.StatusNotFound, "User not found", nil))
 		return
 	}
 
