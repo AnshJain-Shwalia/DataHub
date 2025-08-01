@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
-	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
+	tokenservice "github.com/AnshJain-Shwalia/DataHub/backend/services/token"
+	userservice "github.com/AnshJain-Shwalia/DataHub/backend/services/user"
 	"github.com/gin-gonic/gin/binding"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -53,13 +54,17 @@ type GoogleUserInfo struct {
 
 // GoogleAuthService handles Google OAuth authentication operations
 type GoogleAuthService struct {
-	authService *AuthService
+	authService  *AuthService
+	userService  *userservice.UserService
+	tokenService *tokenservice.TokenService
 }
 
 // NewGoogleAuthService creates a new instance of GoogleAuthService
 func NewGoogleAuthService() *GoogleAuthService {
 	return &GoogleAuthService{
-		authService: NewAuthService(),
+		authService:  NewAuthService(),
+		userService:  userservice.NewUserService(),
+		tokenService: tokenservice.NewTokenService(),
 	}
 }
 
@@ -122,7 +127,7 @@ func (s *GoogleAuthService) ProcessAuthCode(request *ProcessAuthCodeRequest) (*P
 	}
 
 	// If the user is not present in our database, create a new user account
-	user, err := repositories.CreateUserIfNotPresent(userInfo.Email, userInfo.Name)
+	user, err := s.userService.CreateIfNotPresent(userInfo.Email, userInfo.Name)
 	if err != nil {
 		return nil, &AuthError{
 			Message: "Failed to create or retrieve user account",
@@ -132,7 +137,7 @@ func (s *GoogleAuthService) ProcessAuthCode(request *ProcessAuthCodeRequest) (*P
 	}
 
 	// Store or update the user's Google OAuth tokens in the database
-	_, err = repositories.UpsertToken(user.ID, "GOOGLE", token.AccessToken, &token.Expiry, &token.RefreshToken, nil)
+	_, err = s.tokenService.UpsertGoogleToken(user.ID, token.AccessToken, &token.Expiry, &token.RefreshToken)
 	if err != nil {
 		return nil, &AuthError{
 			Message: "Failed to store OAuth tokens in database",

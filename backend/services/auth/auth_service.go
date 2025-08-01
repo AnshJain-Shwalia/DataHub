@@ -6,7 +6,7 @@ import (
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
 	"github.com/AnshJain-Shwalia/DataHub/backend/models"
-	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
+	userservice "github.com/AnshJain-Shwalia/DataHub/backend/services/user"
 	"github.com/AnshJain-Shwalia/DataHub/backend/util"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -23,11 +23,15 @@ type StateRepo struct {
 }
 
 // AuthService handles core authentication operations
-type AuthService struct{}
+type AuthService struct {
+	userService *userservice.UserService
+}
 
 // NewAuthService creates a new instance of AuthService
 func NewAuthService() *AuthService {
-	return &AuthService{}
+	return &AuthService{
+		userService: userservice.NewUserService(),
+	}
 }
 
 // GenerateJWT generates a JWT token for the given user
@@ -53,7 +57,7 @@ func (s *AuthService) GenerateJWT(user *models.User) (string, error) {
 // This method extracts the logic from GetSigninTokenByIDHandler
 func (s *AuthService) GetTokenByUserID(userID string) (string, *models.User, error) {
 	// Find user by ID
-	user, err := repositories.FindUserByID(userID)
+	user, err := s.userService.FindByID(userID)
 	if err != nil {
 		return "", nil, err
 	}

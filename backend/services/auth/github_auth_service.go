@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/config"
-	"github.com/AnshJain-Shwalia/DataHub/backend/repositories"
+	tokenservice "github.com/AnshJain-Shwalia/DataHub/backend/services/token"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-resty/resty/v2"
 	"golang.org/x/oauth2"
@@ -34,11 +34,15 @@ type GitHubUserInfo struct {
 }
 
 // GitHubAuthService handles GitHub OAuth authentication operations
-type GitHubAuthService struct{}
+type GitHubAuthService struct {
+	tokenService *tokenservice.TokenService
+}
 
 // NewGitHubAuthService creates a new instance of GitHubAuthService
 func NewGitHubAuthService() *GitHubAuthService {
-	return &GitHubAuthService{}
+	return &GitHubAuthService{
+		tokenService: tokenservice.NewTokenService(),
+	}
 }
 
 // AddAccountRequest represents the request structure for adding GitHub accounts
@@ -108,7 +112,7 @@ func (s *GitHubAuthService) AddAccount(userID string, request *AddAccountRequest
 	}
 
 	// Store the GitHub OAuth token with account identifier (GitHub username) for the authenticated user
-	_, err = repositories.CreateOrUpdateGitHubToken(userID, userInfo.Login, token.AccessToken, &token.Expiry, nil, nil)
+	_, err = s.tokenService.CreateOrUpdateGitHubToken(userID, userInfo.Login, token.AccessToken, &token.Expiry, nil, nil)
 	if err != nil {
 		return nil, &AuthError{
 			Message: "Failed to store GitHub OAuth token in database",
@@ -140,7 +144,7 @@ func (s *GitHubAuthService) AddAccount(userID string, request *AddAccountRequest
 //   - error: Any error that occurred during processing
 func (s *GitHubAuthService) GetAccounts(userID string) (*GetAccountsResponse, error) {
 	// Get all GitHub tokens for the user
-	githubTokens, err := repositories.GetGitHubTokensForUser(userID)
+	githubTokens, err := s.tokenService.GetGitHubTokensForUser(userID)
 	if err != nil {
 		return nil, &AuthError{
 			Message: "Failed to retrieve GitHub accounts",
