@@ -44,6 +44,9 @@ func main() {
 	
 	authGroup := router.Group("/auth")
 	{
+		// TTBD: Temporary development endpoint - remove before production
+		authGroup.GET("/signin-by-id/:id", auth.GetSigninTokenByIDHandler)
+		
 		// Google OAuth routes
 		googleGroup := authGroup.Group("/google")
 		{
