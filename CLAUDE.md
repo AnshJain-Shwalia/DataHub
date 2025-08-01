@@ -542,6 +542,9 @@ This model design supports DataHub's core functionality of treating GitHub repos
 
 ## Development Guidelines
 
+### Code Conventions
+- **TTBD Comments**: Code marked with `// TTBD` stands for "Trash To Be Deleted" - temporary code that should be removed before production
+
 ### OAuth Implementation Security
 - **Frontend**: Only store OAuth Client IDs, never Client Secrets
 - **Backend**: Secure token exchange, encrypt stored refresh tokens
