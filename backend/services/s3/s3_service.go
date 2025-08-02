@@ -72,7 +72,12 @@ func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLRespon
 		return nil, fmt.Errorf("missing or invalid userId in metadata")
 	}
 	
-	key := fmt.Sprintf("uploads/%s/%s", userID, fileID)
+	chunkID, ok := metadata["chunkId"].(string)
+	if !ok || chunkID == "" {
+		return nil, fmt.Errorf("missing or invalid chunkId in metadata")
+	}
+	
+	key := fmt.Sprintf("uploads/%s/%s/%s", userID, fileID, chunkID)
 	
 	// Convert metadata to S3-compatible format
 	s3Metadata, err := convertToS3Metadata(metadata)
