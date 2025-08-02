@@ -14,9 +14,8 @@ import (
 )
 
 type S3Service struct {
-	client           *s3.Client
-	bucketName       string
-	maxUploadSizeMB  int
+	client     *s3.Client
+	bucketName string
 }
 
 type UploadURLResponse struct {
@@ -42,9 +41,8 @@ func NewS3Service() (*S3Service, error) {
 	client := s3.NewFromConfig(awsCfg)
 
 	return &S3Service{
-		client:          client,
-		bucketName:      cfg.S3BucketName,
-		maxUploadSizeMB: cfg.S3MaxUploadSizeMB,
+		client:     client,
+		bucketName: cfg.S3BucketName,
 	}, nil
 }
 
@@ -63,8 +61,6 @@ func convertToS3Metadata(metadata map[string]any) (map[string]string, error) {
 }
 
 func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLResponse, error) {
-	maxSizeBytes := int64(s.maxUploadSizeMB) * 1024 * 1024
-	
 	// Extract and validate required metadata fields
 	fileID, ok := metadata["fileId"].(string)
 	if !ok || fileID == "" {
@@ -78,9 +74,6 @@ func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLRespon
 	
 	key := fmt.Sprintf("uploads/%s/%s", userID, fileID)
 	
-	// Add maxSizeBytes to metadata before converting
-	metadata["maxSizeBytes"] = maxSizeBytes
-	
 	// Convert metadata to S3-compatible format
 	s3Metadata, err := convertToS3Metadata(metadata)
 	if err != nil {
@@ -93,10 +86,9 @@ func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLRespon
 	presigner := s3.NewPresignClient(s.client)
 	
 	request, err := presigner.PresignPutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucketName),
-		Key:           aws.String(key),
-		ContentLength: aws.Int64(maxSizeBytes),
-		Metadata:      s3Metadata,
+		Bucket:   aws.String(s.bucketName),
+		Key:      aws.String(key),
+		Metadata: s3Metadata,
 	}, func(opts *s3.PresignOptions) {
 		opts.Expires = expirationTime
 	})
