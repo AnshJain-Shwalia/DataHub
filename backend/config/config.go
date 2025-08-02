@@ -23,6 +23,12 @@ type envConfig struct {
 	IsProduction bool `env:"IS_PRODUCTION" envDefault:"false"`
 	// JWTSecret
 	JWTSecret string `env:"JWT_SECRET,required"`
+	// S3 configs
+	AWSAccessKeyID     string `env:"AWS_ACCESS_KEY_ID,required"`
+	AWSSecretAccessKey string `env:"AWS_SECRET_ACCESS_KEY,required"`
+	AWSRegion          string `env:"AWS_REGION,required"`
+	S3BucketName       string `env:"S3_BUCKET_NAME,required"`
+	S3MaxUploadSizeMB  int    `env:"S3_MAX_UPLOAD_SIZE_MB" envDefault:"5"`
 }
 
 var (
