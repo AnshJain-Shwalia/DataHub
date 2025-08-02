@@ -2,7 +2,6 @@ package s3
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -46,44 +45,25 @@ func NewS3Service() (*S3Service, error) {
 	}, nil
 }
 
-func convertToS3Metadata(metadata map[string]any) (map[string]string, error) {
-	s3Metadata := make(map[string]string)
-	
-	for key, value := range metadata {
-		jsonBytes, err := json.Marshal(value)
-		if err != nil {
-			return nil, fmt.Errorf("failed to JSON encode value for key %s: %w", key, err)
-		}
-		s3Metadata[key] = string(jsonBytes)
-	}
-	
-	return s3Metadata, nil
-}
 
-func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLResponse, error) {
+func (s *S3Service) GenerateUploadURL(metadata map[string]string) (*UploadURLResponse, error) {
 	// Extract and validate required metadata fields
-	fileID, ok := metadata["fileId"].(string)
-	if !ok || fileID == "" {
+	fileID := metadata["fileId"]
+	if fileID == "" {
 		return nil, fmt.Errorf("missing or invalid fileId in metadata")
 	}
 	
-	userID, ok := metadata["userId"].(string)
-	if !ok || userID == "" {
+	userID := metadata["userId"]
+	if userID == "" {
 		return nil, fmt.Errorf("missing or invalid userId in metadata")
 	}
 	
-	chunkID, ok := metadata["chunkId"].(string)
-	if !ok || chunkID == "" {
+	chunkID := metadata["chunkId"]
+	if chunkID == "" {
 		return nil, fmt.Errorf("missing or invalid chunkId in metadata")
 	}
 	
 	key := fmt.Sprintf("uploads/%s/%s/%s", userID, fileID, chunkID)
-	
-	// Convert metadata to S3-compatible format
-	s3Metadata, err := convertToS3Metadata(metadata)
-	if err != nil {
-		return nil, err
-	}
 	
 	expirationTime := 15 * time.Minute
 	expiresAt := time.Now().Add(expirationTime)
@@ -93,7 +73,7 @@ func (s *S3Service) GenerateUploadURL(metadata map[string]any) (*UploadURLRespon
 	request, err := presigner.PresignPutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:   aws.String(s.bucketName),
 		Key:      aws.String(key),
-		Metadata: s3Metadata,
+		Metadata: metadata,
 	}, func(opts *s3.PresignOptions) {
 		opts.Expires = expirationTime
 	})
