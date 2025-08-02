@@ -2,6 +2,7 @@
 package repositories
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/AnshJain-Shwalia/DataHub/backend/db"
@@ -22,6 +23,19 @@ import (
 //   - A pointer to the created File model (with ID and timestamps populated)
 //   - An error if the database operation fails
 func CreateFile(name string, size int64, userID string, folderID *string) (*models.File, error) {
+	// Input validation
+	if name == "" || userID == "" {
+		return nil, fmt.Errorf("name and userID are required")
+	}
+	if size < 0 {
+		return nil, fmt.Errorf("size cannot be negative")
+	}
+
+	// Database check
+	if db.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	// Create file struct with provided data and current timestamp
 	file := &models.File{
 		ID:        uuid.New().String(),
@@ -32,6 +46,9 @@ func CreateFile(name string, size int64, userID string, folderID *string) (*mode
 		CreatedAt: time.Now(),
 	}
 
-	// Create record in database and return any errors
-	return file, db.DB.Create(file).Error
+	// Create record in database with error context
+	if err := db.DB.Create(file).Error; err != nil {
+		return nil, fmt.Errorf("failed to create file (name: %s, userID: %s): %w", name, userID, err)
+	}
+	return file, nil
 }
